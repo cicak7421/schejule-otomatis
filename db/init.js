@@ -241,10 +241,10 @@ async function seed() {
   // "Jumlah hari" diisi 9 -- ini menyambung pas ke tanggal 23 Agt (Minggu)
   // sebagai awal siklus mingguan biasa 7 hari untuk minggu-minggu setelahnya.
   const tangerangScheduleCheck = (
-    await db.execute({
-      sql: `SELECT se.id FROM schedule_entries se JOIN bags b ON b.id = se.bag_id
-            WHERE se.date = '2026-08-10' AND b.name = 'OKE OKE BAG' LIMIT 1`,
-    })
+    await db.execute(
+      `SELECT se.id FROM schedule_entries se JOIN bags b ON b.id = se.bag_id
+       WHERE se.date = '2026-08-10' AND b.name = 'OKE OKE BAG' LIMIT 1`
+    )
   ).rows[0];
   if (!tangerangScheduleCheck) {
     const bagRow = async (name) =>
