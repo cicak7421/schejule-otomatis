@@ -96,7 +96,10 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// Edit manual satu slot (HR override) -> otomatis locked supaya tidak ditimpa AI lagi
+// Edit manual satu slot (HR override lewat dropdown). TIDAK mengunci slot --
+// tetap bisa ditimpa lagi oleh Generate Rule-based / Generate AI berikutnya,
+// sesuai keputusan: tidak ada slot yang otomatis terkunci hanya karena
+// diedit manual satu kali.
 router.put('/entry', async (req, res, next) => {
   try {
     const { date, bag_id, shift, host_id } = req.body || {};
@@ -105,9 +108,9 @@ router.put('/entry', async (req, res, next) => {
     }
     await db.execute({
       sql: `INSERT INTO schedule_entries (date, bag_id, shift, host_id, source, locked)
-            VALUES (?, ?, ?, ?, 'manual', 1)
+            VALUES (?, ?, ?, ?, 'manual', 0)
             ON CONFLICT(date, bag_id, shift) DO UPDATE SET
-              host_id = excluded.host_id, source = 'manual', locked = 1`,
+              host_id = excluded.host_id, source = 'manual', locked = 0`,
       args: [date, bag_id, shift, host_id || null],
     });
     res.json({ ok: true });
@@ -116,7 +119,8 @@ router.put('/entry', async (req, res, next) => {
   }
 });
 
-// Lepas kunci manual supaya slot bisa digenerate ulang oleh AI
+// Lepas kunci manual (dipertahankan untuk entry lama yang masih locked, mis.
+// histori seed) supaya slot itu bisa digenerate ulang oleh AI/rule-based.
 router.put('/entry/unlock', async (req, res, next) => {
   try {
     const { date, bag_id, shift } = req.body || {};

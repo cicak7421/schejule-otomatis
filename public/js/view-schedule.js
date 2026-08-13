@@ -152,7 +152,7 @@ async function renderScheduleView(container) {
               method: 'PUT',
               body: JSON.stringify({ date, bag_id: bag.id, shift, host_id: select.value ? Number(select.value) : null }),
             });
-            showToast('Slot diperbarui & dikunci manual');
+            showToast('Slot diperbarui');
             renderScheduleView(container);
           } catch (err) {
             showToast(err.message, true);
@@ -174,7 +174,7 @@ async function renderScheduleView(container) {
   panel.appendChild(table);
   container.appendChild(panel);
 
-  container.appendChild(el('p', { class: 'page-sub', html: '🔒 = dikunci manual (tidak akan ditimpa AI) &nbsp;•&nbsp; latar hijau muda = hasil AI &nbsp;•&nbsp; ganti orang langsung lewat dropdown, otomatis terkunci' }));
+  container.appendChild(el('p', { class: 'page-sub', html: 'latar hijau muda = hasil AI &nbsp;•&nbsp; ganti orang langsung lewat dropdown, tetap bisa ditimpa ulang oleh Generate berikutnya &nbsp;•&nbsp; 🔒 = sisa entri histori lama yang dikunci, klik untuk buka kunci' }));
 }
 
 async function doGenerate(container, weekStart, department, location, useAI, days) {

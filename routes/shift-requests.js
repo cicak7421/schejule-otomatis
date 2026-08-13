@@ -76,15 +76,17 @@ router.post('/:id/review', async (req, res, next) => {
       args: [status, req.session.userId, req.params.id],
     });
 
-    // kalau disetujui, isi/timpa slot jadwal yang bersangkutan & kunci manual
+    // kalau disetujui, isi/timpa slot jadwal yang bersangkutan. Tidak dikunci --
+    // tetap bisa ditimpa oleh Generate Rule-based/AI berikutnya, sama seperti
+    // edit manual lewat dropdown (tidak ada slot yang otomatis terkunci).
     // (aturan hard-constraint lain seperti "jumping" tidak dicek di sini karena
     // ini keputusan eksplisit HR meng-override untuk slot spesifik)
     if (status === 'approved') {
       await db.execute({
         sql: `INSERT INTO schedule_entries (date, bag_id, shift, host_id, source, locked)
-              VALUES (?, ?, ?, ?, 'manual', 1)
+              VALUES (?, ?, ?, ?, 'manual', 0)
               ON CONFLICT(date, bag_id, shift) DO UPDATE SET
-                host_id = excluded.host_id, source = 'manual', locked = 1`,
+                host_id = excluded.host_id, source = 'manual', locked = 0`,
         args: [existing.date, existing.bag_id, existing.shift, existing.host_id],
       });
     }
