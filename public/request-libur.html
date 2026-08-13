@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Request Libur / Shift</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  .tab-switch { display:flex; gap:8px; margin-bottom:18px; }
+  .tab-switch button { flex:1; padding:10px; border-radius:10px; border:1px solid var(--border,#e2e2f0); background:#f4f4fb; font-weight:600; cursor:pointer; font-size:13.5px; }
+  .tab-switch button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .req-form { display:none; }
+  .req-form.active { display:block; }
+</style>
+</head>
+<body>
+<div class="center-page">
+  <div class="auth-card" style="max-width:420px;">
+    <h1>Request Libur / Shift</h1>
+    <p class="sub">Pilih mau ajukan libur atau minta ditempatkan di shift tertentu. HR akan meninjau permintaanmu.</p>
+
+    <div class="tab-switch">
+      <button type="button" id="tabLibur" class="active">🌴 Request Libur</button>
+      <button type="button" id="tabShift">🔁 Request Shift</button>
+    </div>
+
+    <!-- ===== FORM: REQUEST LIBUR ===== -->
+    <form id="leaveForm" class="req-form active">
+      <div class="field">
+        <label>Nama (Host Live / Packing / Admin)</label>
+        <select id="hostId" required></select>
+      </div>
+      <div class="row" style="gap:10px;">
+        <div class="field" style="flex:1;">
+          <label>Dari Tanggal</label>
+          <input type="date" id="dateStart" required />
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Sampai Tanggal</label>
+          <input type="date" id="dateEnd" required />
+        </div>
+      </div>
+      <div class="field">
+        <label>Alasan (opsional)</label>
+        <textarea id="reason" rows="3" style="width:100%;"></textarea>
+      </div>
+      <button type="submit">Kirim Permintaan Libur</button>
+      <p class="error-msg" id="leaveErrorMsg"></p>
+      <p id="leaveSuccessMsg" style="display:none;color:var(--green);font-size:13px;margin-top:10px;">
+        Permintaan libur terkirim! Tunggu persetujuan HR.
+      </p>
+    </form>
+
+    <!-- ===== FORM: REQUEST SHIFT ===== -->
+    <form id="shiftForm" class="req-form">
+      <div class="field">
+        <label>Nama (Host Live / Packing / Admin)</label>
+        <select id="shiftHostId" required></select>
+      </div>
+      <div class="field">
+        <label>Tanggal</label>
+        <input type="date" id="shiftDate" required />
+      </div>
+      <div class="field">
+        <label>Bag / Akun</label>
+        <select id="shiftBagId" required></select>
+      </div>
+      <div class="field">
+        <label>Shift</label>
+        <select id="shiftShift" required></select>
+      </div>
+      <div class="field">
+        <label>Alasan (opsional)</label>
+        <textarea id="shiftReason" rows="3" style="width:100%;"></textarea>
+      </div>
+      <button type="submit">Kirim Permintaan Shift</button>
+      <p class="error-msg" id="shiftErrorMsg"></p>
+      <p id="shiftSuccessMsg" style="display:none;color:var(--green);font-size:13px;margin-top:10px;">
+        Permintaan shift terkirim! Tunggu persetujuan HR.
+      </p>
+    </form>
+  </div>
+</div>
+<script>
+const DEPT_LABEL = { host_live: 'Host Live', packing: 'Packing', admin: 'Admin' };
+const SHIFT_LABEL = { P: 'Pagi', S: 'Siang', M: 'Malam', MID: 'Middle' };
+// Sinkron dengan DEPT_SHIFTS di lib/scheduler.js
+const DEPT_SHIFTS = { host_live: ['P', 'S', 'M'], packing: ['P', 'MID', 'S'], admin: ['P', 'S'] };
+
+let allHosts = [];
+let allBags = [];
+
+// ---------- Tab switching ----------
+const tabLibur = document.getElementById('tabLibur');
+const tabShift = document.getElementById('tabShift');
+const leaveForm = document.getElementById('leaveForm');
+const shiftForm = document.getElementById('shiftForm');
+tabLibur.addEventListener('click', () => {
+  tabLibur.classList.add('active'); tabShift.classList.remove('active');
+  leaveForm.classList.add('active'); shiftForm.classList.remove('active');
+});
+tabShift.addEventListener('click', () => {
+  tabShift.classList.add('active'); tabLibur.classList.remove('active');
+  shiftForm.classList.add('active'); leaveForm.classList.remove('active');
+});
+
+// ---------- Load data ----------
+async function loadHostsAndBags() {
+  const [hostsRes, bagsRes] = await Promise.all([
+    fetch('/api/hosts/public'),
+    fetch('/api/bags/public'),
+  ]);
+  allHosts = (await hostsRes.json()).filter((h) => h.active);
+  allBags = (await bagsRes.json()).filter((b) => b.active);
+
+  const LOC_LABEL = { jakarta: 'Jakarta', tangerang: 'Tangerang' };
+  const hostOptionsHtml = allHosts
+    .map((h) => `<option value="${h.id}" data-dept="${h.department}" data-loc="${h.location}">${h.name} (${LOC_LABEL[h.location] || h.location} — ${DEPT_LABEL[h.department] || h.department})</option>`)
+    .join('');
+
+  document.getElementById('hostId').innerHTML = hostOptionsHtml;
+  document.getElementById('shiftHostId').innerHTML = hostOptionsHtml;
+
+  refreshShiftBagAndShiftOptions();
+}
+loadHostsAndBags();
+
+// Bag & shift options di form shift menyesuaikan department host yang dipilih
+function refreshShiftBagAndShiftOptions() {
+  const hostSel = document.getElementById('shiftHostId');
+  const selectedOpt = hostSel.options[hostSel.selectedIndex];
+  const dept = selectedOpt ? selectedOpt.dataset.dept : 'host_live';
+  const loc = selectedOpt ? selectedOpt.dataset.loc : 'jakarta';
+
+  // Bag hanya ditampilkan yang satu lokasi dengan host (host tidak boleh
+  // request shift di bag lokasi lain).
+  const bagSel = document.getElementById('shiftBagId');
+  bagSel.innerHTML = allBags
+    .filter((b) => b.department === dept && b.location === loc)
+    .map((b) => `<option value="${b.id}">${b.name}</option>`)
+    .join('');
+
+  const shiftSel = document.getElementById('shiftShift');
+  shiftSel.innerHTML = (DEPT_SHIFTS[dept] || [])
+    .map((s) => `<option value="${s}">${SHIFT_LABEL[s] || s}</option>`)
+    .join('');
+}
+document.getElementById('shiftHostId').addEventListener('change', refreshShiftBagAndShiftOptions);
+
+// ---------- Submit: Request Libur ----------
+leaveForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('leaveErrorMsg');
+  const okEl = document.getElementById('leaveSuccessMsg');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  const body = {
+    host_id: Number(document.getElementById('hostId').value),
+    date_start: document.getElementById('dateStart').value,
+    date_end: document.getElementById('dateEnd').value,
+    reason: document.getElementById('reason').value.trim(),
+  };
+  try {
+    const res = await fetch('/api/leaves/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Gagal mengirim');
+    okEl.style.display = 'block';
+    e.target.reset();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+});
+
+// ---------- Submit: Request Shift ----------
+shiftForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('shiftErrorMsg');
+  const okEl = document.getElementById('shiftSuccessMsg');
+  errEl.style.display = 'none';
+  okEl.style.display = 'none';
+  const body = {
+    host_id: Number(document.getElementById('shiftHostId').value),
+    date: document.getElementById('shiftDate').value,
+    bag_id: Number(document.getElementById('shiftBagId').value),
+    shift: document.getElementById('shiftShift').value,
+    reason: document.getElementById('shiftReason').value.trim(),
+  };
+  try {
+    const res = await fetch('/api/shift-requests/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Gagal mengirim');
+    okEl.style.display = 'block';
+    e.target.reset();
+    refreshShiftBagAndShiftOptions();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  }
+});
+</script>
+</body>
+</html>

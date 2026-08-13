@@ -1,0 +1,182 @@
+const SHIFT_LABELS = { P: 'Pagi', S: 'Siang', M: 'Malam', MID: 'Middle' };
+const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jumat", 'Sabtu'];
+const DEPT_TABS = [
+  { id: 'host_live', label: '🎥 Host Live' },
+  { id: 'packing', label: '📦 Packing' },
+  { id: 'admin', label: '🗂️ Admin' },
+];
+const LOCATION_TABS = [
+  { id: 'jakarta', label: '📍 Jakarta' },
+  { id: 'tangerang', label: '📍 Tangerang' },
+];
+
+let _scheduleState = { weekStart: weekStartOf(new Date()), department: 'host_live', location: 'jakarta' };
+
+// Minggu (Sunday) dipakai sebagai hari pertama dalam seminggu, sesuai
+// tampilan jadwal (kolom TANGGAL dimulai dari "Minggu") & kebiasaan lokal.
+// Dulu sempat pakai patokan Senin (ISO) yang bikin weekPicker "meloncat" ke
+// minggu sebelumnya kalau user pilih tanggal hari Minggu — sekarang konsisten.
+function weekStartOf(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 = Minggu ... 6 = Sabtu
+  d.setDate(d.getDate() - day);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtDateLabel(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${DAY_NAMES[d.getDay()]}, ${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+async function renderScheduleView(container) {
+  const weekStart = _scheduleState.weekStart;
+  const department = _scheduleState.department || 'host_live';
+  const location = _scheduleState.location || 'jakarta';
+  container.innerHTML = '';
+  container.appendChild(el('h1', { class: 'page-title', text: 'Jadwal Mingguan' }));
+  container.appendChild(el('p', { class: 'page-sub', text: 'Kelola & generate jadwal Host Live, Packing, dan Admin otomatis dengan bantuan AI' }));
+
+  // Tab lokasi -- Jakarta & Tangerang benar-benar terpisah (host/bag tidak
+  // pernah tertukar antar lokasi), jadi ini dipilih dulu sebelum departemen.
+  const locRow = el('div', { class: 'row', style: 'gap:8px;margin-bottom:8px;' });
+  for (const tab of LOCATION_TABS) {
+    const btn = el('button', {
+      class: 'btn sm ' + (location === tab.id ? '' : 'ghost'),
+      onclick: () => { _scheduleState.location = tab.id; renderScheduleView(container); },
+    }, tab.label);
+    locRow.appendChild(btn);
+  }
+  container.appendChild(locRow);
+
+  // Tab departemen
+  const tabRow = el('div', { class: 'row', style: 'gap:8px;margin-bottom:14px;' });
+  for (const tab of DEPT_TABS) {
+    const btn = el('button', {
+      class: 'btn sm ' + (department === tab.id ? '' : 'ghost'),
+      onclick: () => { _scheduleState.department = tab.id; renderScheduleView(container); },
+    }, tab.label);
+    tabRow.appendChild(btn);
+  }
+  container.appendChild(tabRow);
+
+  const controls = el('div', { class: 'panel' });
+  const weekRow = el('div', { class: 'row between' });
+  const leftControls = el('div', { class: 'row' }, [
+    el('button', { class: 'btn ghost sm', onclick: () => { _scheduleState.weekStart = addDays(weekStart, -7); renderScheduleView(container); } }, '‹ Minggu lalu'),
+    el('input', { type: 'date', id: 'weekPicker', value: weekStart, onchange: (e) => { _scheduleState.weekStart = weekStartOf(new Date(e.target.value + 'T00:00:00')); renderScheduleView(container); } }),
+    el('button', { class: 'btn ghost sm', onclick: () => { _scheduleState.weekStart = addDays(weekStart, 7); renderScheduleView(container); } }, 'Minggu depan ›'),
+  ]);
+  const rightControls = el('div', { class: 'row' }, [
+    el('button', { class: 'btn secondary', onclick: () => doGenerate(container, weekStart, department, location, false) }, '⚙️ Generate Rule-based'),
+    el('button', { class: 'btn', onclick: () => doGenerate(container, weekStart, department, location, true) }, '✨ Generate dengan AI'),
+  ]);
+  weekRow.appendChild(leftControls);
+  weekRow.appendChild(rightControls);
+  controls.appendChild(weekRow);
+  container.appendChild(controls);
+
+  const data = await apiFetch(`/api/schedule/week/${weekStart}?department=${department}&location=${location}`);
+  const shifts = data.shifts && data.shifts.length ? data.shifts : ['P', 'S', 'M'];
+
+  if (data.lastLog && data.lastLog.summary) {
+    container.appendChild(el('div', {
+      class: 'summary-box',
+      html: `<strong>Insight AI:</strong> ${escapeHtml(data.lastLog.summary)}`
+    }));
+  }
+
+  if (!data.bags.length) {
+    container.appendChild(el('div', { class: 'empty-state', text: 'Belum ada tim/bag aktif untuk departemen ini. Tambahkan dulu di menu "Bag / Akun" (khusus Host Live) atau hubungi admin sistem.' }));
+    return;
+  }
+  if (!data.hosts.length) {
+    container.appendChild(el('div', { class: 'empty-state', text: 'Belum ada orang aktif di departemen ini. Tambahkan dulu di menu "Host / Staff".' }));
+    return;
+  }
+
+  const entryMap = new Map();
+  for (const e of data.entries) entryMap.set(`${e.date}|${e.bag_id}|${e.shift}`, e);
+
+  const panel = el('div', { class: 'panel', style: 'overflow-x:auto;' });
+  const table = el('table', { class: 'sched-table' });
+
+  const headRow1 = el('tr');
+  headRow1.appendChild(el('th', { text: 'TANGGAL' }));
+  for (const bag of data.bags) headRow1.appendChild(el('th', { colspan: String(shifts.length), text: bag.name }));
+  const headRow2 = el('tr');
+  headRow2.appendChild(el('th', {}));
+  for (const bag of data.bags) {
+    shifts.forEach((s) => headRow2.appendChild(el('th', { text: SHIFT_LABELS[s] || s })));
+  }
+  const thead = el('thead', {}, [headRow1, headRow2]);
+  table.appendChild(thead);
+
+  const tbody = el('tbody');
+  for (const date of data.dates) {
+    const tr = el('tr');
+    tr.appendChild(el('td', { class: 'sched-date-col', text: fmtDateLabel(date) }));
+    for (const bag of data.bags) {
+      for (const shift of shifts) {
+        const entry = entryMap.get(`${date}|${bag.id}|${shift}`);
+        const td = el('td', { class: 'slot-cell' + (entry?.locked ? ' locked' : '') + (entry?.source === 'ai' ? ' ai' : '') + (!entry?.host_id ? ' empty' : '') });
+        const select = el('select', { class: 'slot-select' });
+        select.appendChild(el('option', { value: '' }, '— kosong —'));
+        for (const h of data.hosts) {
+          const opt = el('option', { value: h.id }, h.name);
+          if (entry && entry.host_id === h.id) opt.setAttribute('selected', 'selected');
+          select.appendChild(opt);
+        }
+        select.addEventListener('change', async () => {
+          try {
+            await apiFetch('/api/schedule/entry', {
+              method: 'PUT',
+              body: JSON.stringify({ date, bag_id: bag.id, shift, host_id: select.value ? Number(select.value) : null }),
+            });
+            showToast('Slot diperbarui & dikunci manual');
+            renderScheduleView(container);
+          } catch (err) {
+            showToast(err.message, true);
+          }
+        });
+        td.appendChild(select);
+        if (entry?.locked) td.appendChild(el('span', { class: 'lock-icon', title: 'Dikunci manual, klik untuk buka kunci', onclick: async (ev) => {
+          ev.stopPropagation();
+          await apiFetch('/api/schedule/entry/unlock', { method: 'PUT', body: JSON.stringify({ date, bag_id: bag.id, shift }) });
+          showToast('Kunci dibuka, slot ini bisa digenerate ulang');
+          renderScheduleView(container);
+        } }, '🔒'));
+        tr.appendChild(td);
+      }
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  panel.appendChild(table);
+  container.appendChild(panel);
+
+  container.appendChild(el('p', { class: 'page-sub', html: '🔒 = dikunci manual (tidak akan ditimpa AI) &nbsp;•&nbsp; latar hijau muda = hasil AI &nbsp;•&nbsp; ganti orang langsung lewat dropdown, otomatis terkunci' }));
+}
+
+async function doGenerate(container, weekStart, department, location, useAI) {
+  try {
+    showToast(useAI ? 'Meminta AI menyusun jadwal...' : 'Menyusun jadwal rule-based...');
+    const result = await apiFetch('/api/schedule/generate', {
+      method: 'POST',
+      body: JSON.stringify({ weekStart, department, location, useAI }),
+    });
+    showToast(`Jadwal minggu ${weekStart} berhasil dibuat (${result.count} slot)`);
+    renderScheduleView(container);
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
