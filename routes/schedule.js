@@ -32,7 +32,8 @@ router.get('/week/:weekStart', async (req, res, next) => {
     const { weekStart } = req.params;
     const department = DEPARTMENTS.includes(req.query.department) ? req.query.department : 'host_live';
     const location = LOCATIONS.includes(req.query.location) ? req.query.location : 'tangerang';
-    const dates = weekDates(weekStart);
+    const days = Math.min(31, Math.max(1, parseInt(req.query.days, 10) || 7));
+    const dates = weekDates(weekStart, days);
     const weekEnd = dates[dates.length - 1];
 
     const bags = (
@@ -74,16 +75,20 @@ router.get('/week/:weekStart', async (req, res, next) => {
   }
 });
 
-// Generate / re-generate jadwal 1 minggu dengan bantuan AI
+// Generate / re-generate jadwal dengan bantuan AI.
+// `days` normalnya 7 (mingguan) -- bisa diisi nilai lain untuk generate SATU
+// KALI rentang khusus (misal 9 hari, buat menyambung histori yang belum
+// sejalan dengan siklus Minggu-Sabtu). Minggu berikutnya kembali ke 7 hari.
 router.post('/generate', async (req, res) => {
-  const { weekStart, bagIds, department, location, useAI } = req.body || {};
-  if (!weekStart) return res.status(400).json({ error: 'weekStart wajib diisi (format YYYY-MM-DD, hari Minggu)' });
+  const { weekStart, bagIds, department, location, useAI, days } = req.body || {};
+  if (!weekStart) return res.status(400).json({ error: 'weekStart wajib diisi (format YYYY-MM-DD)' });
   try {
     const result = await generateWeeklySchedule(weekStart, {
       bagIds: bagIds && bagIds.length ? bagIds : null,
       department: DEPARTMENTS.includes(department) ? department : null,
       location: LOCATIONS.includes(location) ? location : 'tangerang',
       useAI: useAI !== false,
+      days: Math.min(31, Math.max(1, parseInt(days, 10) || 7)),
     });
     res.json(result);
   } catch (err) {

@@ -227,18 +227,75 @@ async function seed() {
     console.log('[seed] Histori jadwal Jakarta 10-16 Agt 2026 diinput (Bagus Bag, Ceria Bag, Packing)');
   }
 
-  // CATATAN: dulu di sini ada data jadwal historis hardcoded (10-14 Agt 2026,
-  // Senin-Jumat saja) hasil import dari foto "JADWAL HOST LIVE TANGERANG"
-  // punya SPV lama. Data itu sudah dihapus dari seed karena:
-  //  1. Cuma nutup 5 hari kerja (Senin-Jumat), sedangkan sistem sekarang
-  //     jalan mingguan penuh (Minggu-Sabtu, 7 hari) — jadi bikin bingung
-  //     kalau ikut ke-generate ulang tiap kali database di-reset/redeploy.
-  //  2. locked=1 di semua slotnya bikin AI/rule-based generator tidak bisa
-  //     menyesuaikan slot itu lagi walau datanya sudah basi.
-  // Sekarang jadwal SELALU mulai kosong dan diisi lewat tombol "Generate"
-  // di dashboard (rule-based atau AI) — lebih rapi & konsisten untuk
-  // pemakaian mingguan yang berkelanjutan. Kalau butuh data historis lagi
-  // sebagai bahan belajar AI, tinggal generate & kunci manual dari UI.
+  // ===================== HISTORI TANGERANG (HOST LIVE) =====================
+  // Histori jadwal Tangerang 10-14 Agt 2026, hasil input dari foto "JADWAL
+  // HOST LIVE TANGERANG" (SPV). Disimpan locked=1 (source='manual') sama
+  // seperti histori Jakarta -- tidak akan pernah ditimpa generate ulang,
+  // dan dipakai AI/rule-based sebagai bahan belajar pola.
+  //
+  // Catatan: cuma nutup 5 hari (Senin-Jumat) karena itu semua data yang
+  // tersedia; tidak menutup 1 minggu penuh Minggu-Sabtu. Supaya jadwal
+  // berikutnya tetap bisa jalan mingguan (Minggu-Sabtu) seperti Jakarta,
+  // generate lanjutannya dilakukan SATU KALI untuk rentang 15-23 Agt 2026
+  // (9 hari, Sabtu-Minggu) lewat tombol Generate di dashboard dengan
+  // "Jumlah hari" diisi 9 -- ini menyambung pas ke tanggal 23 Agt (Minggu)
+  // sebagai awal siklus mingguan biasa 7 hari untuk minggu-minggu setelahnya.
+  const tangerangScheduleCheck = (
+    await db.execute({
+      sql: `SELECT se.id FROM schedule_entries se JOIN bags b ON b.id = se.bag_id
+            WHERE se.date = '2026-08-10' AND b.name = 'OKE OKE BAG' LIMIT 1`,
+    })
+  ).rows[0];
+  if (!tangerangScheduleCheck) {
+    const bagRow = async (name) =>
+      (await db.execute({ sql: 'SELECT id FROM bags WHERE name = ? AND location = ?', args: [name, 'tangerang'] })).rows[0]?.id;
+    const hostRow = async (name) =>
+      (await db.execute({ sql: 'SELECT id FROM hosts WHERE name = ? AND location = ?', args: [name, 'tangerang'] })).rows[0]?.id;
+
+    const okeId = await bagRow('OKE OKE BAG');
+    const larisId = await bagRow('LARIS BAG');
+
+    if (okeId && larisId) {
+      const H = {};
+      for (const n of ['Ayu', 'Yuni', 'Sulis', 'Izmi', 'Sarah']) {
+        H[n] = await hostRow(n);
+      }
+
+      // { date: { P, S } } (M tidak dipakai di Tangerang saat ini, sesuai data asli)
+      const okeSchedule = {
+        '2026-08-10': { P: 'Ayu', S: 'Yuni' },
+        '2026-08-11': { P: 'Ayu', S: 'Izmi' },
+        '2026-08-12': { P: 'Izmi', S: 'Yuni' },
+        '2026-08-13': { P: 'Ayu', S: 'Yuni' },
+        '2026-08-14': { P: 'Ayu', S: 'Yuni' },
+      };
+      const larisSchedule = {
+        '2026-08-10': { P: 'Sulis', S: 'Izmi' },
+        '2026-08-11': { P: 'Sulis', S: 'Sarah' },
+        '2026-08-12': { P: 'Sulis', S: 'Sarah' },
+        '2026-08-13': { P: 'Izmi', S: 'Sarah' },
+        '2026-08-14': { P: 'Sulis', S: 'Sarah' },
+      };
+
+      const stmts = [];
+      const addRows = (bagId, schedule) => {
+        for (const [date, shifts] of Object.entries(schedule)) {
+          for (const [shift, hostName] of Object.entries(shifts)) {
+            stmts.push({
+              sql: `INSERT INTO schedule_entries (date, bag_id, shift, host_id, source, locked)
+                    VALUES (?, ?, ?, ?, 'manual', 1)`,
+              args: [date, bagId, shift, hostName ? H[hostName] : null],
+            });
+          }
+        }
+      };
+      addRows(okeId, okeSchedule);
+      addRows(larisId, larisSchedule);
+
+      await db.batch(stmts, 'write');
+      console.log('[seed] Histori jadwal Tangerang 10-14 Agt 2026 diinput (OKE OKE BAG, LARIS BAG)');
+    }
+  }
 }
 
 // Memoized: schema + seed cuma dijalankan sekali per instance lambda/server,

@@ -10,7 +10,7 @@ const LOCATION_TABS = [
   { id: 'tangerang', label: '📍 Tangerang' },
 ];
 
-let _scheduleState = { weekStart: weekStartOf(new Date()), department: 'host_live', location: 'jakarta' };
+let _scheduleState = { weekStart: weekStartOf(new Date()), department: 'host_live', location: 'jakarta', days: 7 };
 
 // Minggu (Sunday) dipakai sebagai hari pertama dalam seminggu, sesuai
 // tampilan jadwal (kolom TANGGAL dimulai dari "Minggu") & kebiasaan lokal.
@@ -38,6 +38,7 @@ async function renderScheduleView(container) {
   const weekStart = _scheduleState.weekStart;
   const department = _scheduleState.department || 'host_live';
   const location = _scheduleState.location || 'jakarta';
+  const days = _scheduleState.days || 7;
   container.innerHTML = '';
   container.appendChild(el('h1', { class: 'page-title', text: 'Jadwal Mingguan' }));
   container.appendChild(el('p', { class: 'page-sub', text: 'Kelola & generate jadwal Host Live, Packing, dan Admin otomatis dengan bantuan AI' }));
@@ -69,19 +70,32 @@ async function renderScheduleView(container) {
   const weekRow = el('div', { class: 'row between' });
   const leftControls = el('div', { class: 'row' }, [
     el('button', { class: 'btn ghost sm', onclick: () => { _scheduleState.weekStart = addDays(weekStart, -7); renderScheduleView(container); } }, '‹ Minggu lalu'),
-    el('input', { type: 'date', id: 'weekPicker', value: weekStart, onchange: (e) => { _scheduleState.weekStart = weekStartOf(new Date(e.target.value + 'T00:00:00')); renderScheduleView(container); } }),
+    // Catatan: tanggal yang dipilih di sini TIDAK dipaksa ke hari Minggu lagi,
+    // supaya bisa dipakai buat generate rentang khusus (mis. mulai Sabtu)
+    // waktu menyambung histori yang belum sejalan ke siklus mingguan biasa.
+    el('input', { type: 'date', id: 'weekPicker', value: weekStart, onchange: (e) => { _scheduleState.weekStart = e.target.value; renderScheduleView(container); } }),
     el('button', { class: 'btn ghost sm', onclick: () => { _scheduleState.weekStart = addDays(weekStart, 7); renderScheduleView(container); } }, 'Minggu depan ›'),
+    el('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);margin-left:6px;' }, [
+      el('span', { text: 'Jumlah hari' }),
+      el('input', {
+        type: 'number', min: '1', max: '31', value: String(days), style: 'width:60px;padding:6px;',
+        onchange: (e) => { _scheduleState.days = Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 7)); renderScheduleView(container); },
+      }),
+    ]),
   ]);
   const rightControls = el('div', { class: 'row' }, [
-    el('button', { class: 'btn secondary', onclick: () => doGenerate(container, weekStart, department, location, false) }, '⚙️ Generate Rule-based'),
-    el('button', { class: 'btn', onclick: () => doGenerate(container, weekStart, department, location, true) }, '✨ Generate dengan AI'),
+    el('button', { class: 'btn secondary', onclick: () => doGenerate(container, weekStart, department, location, false, days) }, '⚙️ Generate Rule-based'),
+    el('button', { class: 'btn', onclick: () => doGenerate(container, weekStart, department, location, true, days) }, '✨ Generate dengan AI'),
   ]);
   weekRow.appendChild(leftControls);
   weekRow.appendChild(rightControls);
   controls.appendChild(weekRow);
+  if (days !== 7) {
+    controls.appendChild(el('p', { class: 'page-sub', style: 'margin:8px 0 0;', text: `Mode rentang khusus: ${days} hari mulai ${fmtDateLabel(weekStart)}. Set ulang ke 7 buat kembali ke mode mingguan biasa.` }));
+  }
   container.appendChild(controls);
 
-  const data = await apiFetch(`/api/schedule/week/${weekStart}?department=${department}&location=${location}`);
+  const data = await apiFetch(`/api/schedule/week/${weekStart}?department=${department}&location=${location}&days=${days}`);
   const shifts = data.shifts && data.shifts.length ? data.shifts : ['P', 'S', 'M'];
 
   if (data.lastLog && data.lastLog.summary) {
@@ -163,12 +177,12 @@ async function renderScheduleView(container) {
   container.appendChild(el('p', { class: 'page-sub', html: '🔒 = dikunci manual (tidak akan ditimpa AI) &nbsp;•&nbsp; latar hijau muda = hasil AI &nbsp;•&nbsp; ganti orang langsung lewat dropdown, otomatis terkunci' }));
 }
 
-async function doGenerate(container, weekStart, department, location, useAI) {
+async function doGenerate(container, weekStart, department, location, useAI, days) {
   try {
     showToast(useAI ? 'Meminta AI menyusun jadwal...' : 'Menyusun jadwal rule-based...');
     const result = await apiFetch('/api/schedule/generate', {
       method: 'POST',
-      body: JSON.stringify({ weekStart, department, location, useAI }),
+      body: JSON.stringify({ weekStart, department, location, useAI, days: days || 7 }),
     });
     showToast(`Jadwal minggu ${weekStart} berhasil dibuat (${result.count} slot)`);
     renderScheduleView(container);
