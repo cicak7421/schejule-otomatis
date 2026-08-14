@@ -50,6 +50,13 @@ async function migrate() {
   // ditambahkan, jadi tidak perlu migrasi data manual lebih lanjut.
   await safeAlter("ALTER TABLE hosts ADD COLUMN location TEXT NOT NULL DEFAULT 'tangerang'");
   await safeAlter("ALTER TABLE bags ADD COLUMN location TEXT NOT NULL DEFAULT 'tangerang'");
+  await safeAlter('ALTER TABLE bags ADD COLUMN shifts TEXT');
+  // Tangerang (OKE OKE BAG, LARIS BAG) di kondisi nyata cuma buka shift Pagi &
+  // Siang (tidak ada Malam) -- backfill sekali supaya bag lama yang belum punya
+  // `shifts` custom tidak terus digenerate dengan kolom Malam kosong melompong.
+  await db.execute(
+    "UPDATE bags SET shifts = 'P,S' WHERE location = 'tangerang' AND department = 'host_live' AND shifts IS NULL"
+  );
   await migrateShiftCheck();
   await db.execute('CREATE INDEX IF NOT EXISTS idx_schedule_date ON schedule_entries(date)');
   await db.execute('CREATE INDEX IF NOT EXISTS idx_schedule_host ON schedule_entries(host_id)');
@@ -73,12 +80,13 @@ async function seed() {
   if (!bagCount) {
     await db.batch(
       [
-        { sql: 'INSERT INTO bags (name, sort_order, department) VALUES (?, ?, ?)', args: ['OKE OKE BAG', 1, 'host_live'] },
-        { sql: 'INSERT INTO bags (name, sort_order, department) VALUES (?, ?, ?)', args: ['LARIS BAG', 2, 'host_live'] },
+        // Tangerang cuma buka shift Pagi & Siang (tidak ada Malam) sesuai operasional nyata.
+        { sql: 'INSERT INTO bags (name, sort_order, department, shifts) VALUES (?, ?, ?, ?)', args: ['OKE OKE BAG', 1, 'host_live', 'P,S'] },
+        { sql: 'INSERT INTO bags (name, sort_order, department, shifts) VALUES (?, ?, ?, ?)', args: ['LARIS BAG', 2, 'host_live', 'P,S'] },
       ],
       'write'
     );
-    console.log('[seed] Bag awal dibuat: OKE OKE BAG, LARIS BAG');
+    console.log('[seed] Bag awal dibuat: OKE OKE BAG, LARIS BAG (Pagi & Siang saja)');
   }
 
   // "Bag virtual" untuk tim Packing & Admin (bukan akun live, cuma wadah

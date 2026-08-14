@@ -17,6 +17,10 @@ CREATE TABLE IF NOT EXISTS bags (
   sort_order INTEGER DEFAULT 0,
   department TEXT NOT NULL DEFAULT 'host_live', -- 'host_live' | 'packing' | 'admin'
   location TEXT NOT NULL DEFAULT 'tangerang', -- 'jakarta' | 'tangerang' -- lokasi live/tim, tidak boleh dicampur antar lokasi
+  shifts TEXT, -- daftar shift yang benar-benar dipakai bag ini, mis. 'P,S' atau 'P,S,M'.
+               -- NULL = pakai default department (lihat DEPT_SHIFTS di lib/scheduler.js).
+               -- Dipakai supaya bag yang memang tidak buka shift Malam (mis. sebagian
+               -- akun di Tangerang) tidak terus-terusan digenerate kolom kosong.
   created_at TEXT DEFAULT (datetime('now'))
 );
 

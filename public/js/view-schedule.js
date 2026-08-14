@@ -95,7 +95,9 @@ async function renderScheduleView(container) {
   container.appendChild(controls);
 
   const data = await apiFetch(`/api/schedule/week/${weekStart}?department=${department}&location=${location}&days=${days}`);
-  const shifts = data.shifts && data.shifts.length ? data.shifts : ['P', 'S', 'M'];
+  // Tiap bag punya daftar shift-nya sendiri (mis. Tangerang cuma Pagi & Siang,
+  // tanpa Malam) -- jangan diseragamkan, supaya tidak ada kolom kosong percuma.
+  for (const b of data.bags) b.shifts_list = b.shifts_list && b.shifts_list.length ? b.shifts_list : ['P', 'S', 'M'];
 
   if (data.lastLog && data.lastLog.summary) {
     container.appendChild(el('div', {
@@ -129,11 +131,11 @@ async function renderScheduleView(container) {
 
   const headRow1 = el('tr');
   headRow1.appendChild(el('th', { text: 'TANGGAL' }));
-  for (const bag of data.bags) headRow1.appendChild(el('th', { colspan: String(shifts.length), text: bag.name }));
+  for (const bag of data.bags) headRow1.appendChild(el('th', { colspan: String(bag.shifts_list.length), text: bag.name }));
   const headRow2 = el('tr');
   headRow2.appendChild(el('th', {}));
   for (const bag of data.bags) {
-    shifts.forEach((s) => headRow2.appendChild(el('th', { text: SHIFT_LABELS[s] || s })));
+    bag.shifts_list.forEach((s) => headRow2.appendChild(el('th', { text: SHIFT_LABELS[s] || s })));
   }
   const thead = el('thead', {}, [headRow1, headRow2]);
   table.appendChild(thead);
@@ -146,7 +148,7 @@ async function renderScheduleView(container) {
     const tr = el('tr', { class: (isWeekend ? 'weekend-row' : '') + (isEvent ? ' event-row' : '') });
     tr.appendChild(el('td', { class: 'sched-date-col' + (isWeekend ? ' weekend' : ''), text: fmtDateLabel(date) + (isEvent ? ' 📅' : '') }));
     for (const bag of data.bags) {
-      for (const shift of shifts) {
+      for (const shift of bag.shifts_list) {
         const entry = entryMap.get(`${date}|${bag.id}|${shift}`);
         const td = el('td', { class: 'slot-cell' + (entry?.locked ? ' locked' : '') + (entry?.source === 'ai' ? ' ai' : '') + (!entry?.host_id ? ' empty' : '') });
         const select = el('select', { class: 'slot-select' });

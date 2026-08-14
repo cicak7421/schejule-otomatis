@@ -10,6 +10,7 @@ const {
   LOCATIONS,
   LOCATION_LABEL,
   isEventBlackout,
+  bagShifts,
 } = require('../lib/scheduler');
 
 const router = express.Router();
@@ -43,6 +44,10 @@ router.get('/week/:weekStart', async (req, res, next) => {
         args: [department, location],
       })
     ).rows;
+    // Tiap bag bisa punya shift-nya sendiri (mis. Tangerang cuma Pagi & Siang,
+    // tanpa Malam) -- disertakan per-bag di response supaya tabel di frontend
+    // tidak menyeragamkan semua bag pakai shift department default.
+    for (const b of bags) b.shifts_list = bagShifts(b);
     const hosts = (
       await db.execute({
         sql: 'SELECT * FROM hosts WHERE active = 1 AND department = ? AND location = ? ORDER BY name',

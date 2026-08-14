@@ -1,6 +1,6 @@
 const express = require('express');
 const { db } = require('../db/init');
-const { DEPARTMENTS, LOCATIONS } = require('../lib/scheduler');
+const { DEPARTMENTS, LOCATIONS, SHIFTS } = require('../lib/scheduler');
 
 const router = express.Router();
 
@@ -9,6 +9,15 @@ function normDept(d) {
 }
 function normLoc(l) {
   return LOCATIONS.includes(l) ? l : 'tangerang';
+}
+// `shifts` dikirim sebagai array (mis. ['P','S']) atau string 'P,S' dari frontend.
+// null/undefined -> tidak diubah (biar bisa PUT tanpa perlu selalu kirim shifts).
+function normShifts(shifts) {
+  if (shifts === undefined) return undefined;
+  if (shifts === null) return null;
+  const arr = Array.isArray(shifts) ? shifts : String(shifts).split(',');
+  const clean = arr.map((s) => String(s).trim()).filter((s) => SHIFTS.includes(s));
+  return clean.length ? clean.join(',') : null;
 }
 
 router.get('/', async (req, res, next) => {
@@ -38,12 +47,12 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { name, sort_order, department, location } = req.body || {};
+    const { name, sort_order, department, location, shifts } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Nama bag wajib diisi' });
     try {
       const info = await db.execute({
-        sql: 'INSERT INTO bags (name, sort_order, department, location) VALUES (?, ?, ?, ?)',
-        args: [name.trim(), sort_order || 0, normDept(department), normLoc(location)],
+        sql: 'INSERT INTO bags (name, sort_order, department, location, shifts) VALUES (?, ?, ?, ?, ?)',
+        args: [name.trim(), sort_order || 0, normDept(department), normLoc(location), normShifts(shifts) ?? null],
       });
       const row = (
         await db.execute({
@@ -62,18 +71,20 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, active, sort_order, location } = req.body || {};
+    const { name, active, sort_order, location, shifts } = req.body || {};
     const existing = (
       await db.execute({ sql: 'SELECT * FROM bags WHERE id = ?', args: [req.params.id] })
     ).rows[0];
     if (!existing) return res.status(404).json({ error: 'Bag tidak ditemukan' });
+    const normalizedShifts = normShifts(shifts);
     await db.execute({
-      sql: 'UPDATE bags SET name = ?, active = ?, sort_order = ?, location = ? WHERE id = ?',
+      sql: 'UPDATE bags SET name = ?, active = ?, sort_order = ?, location = ?, shifts = ? WHERE id = ?',
       args: [
         name ?? existing.name,
         active === undefined ? existing.active : active ? 1 : 0,
         sort_order ?? existing.sort_order,
         location ? normLoc(location) : existing.location,
+        normalizedShifts === undefined ? existing.shifts : normalizedShifts,
         req.params.id,
       ],
     });
