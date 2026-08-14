@@ -9,6 +9,7 @@ const {
   DEPT_SHIFTS,
   LOCATIONS,
   LOCATION_LABEL,
+  isEventBlackout,
 } = require('../lib/scheduler');
 
 const router = express.Router();
@@ -23,7 +24,7 @@ router.get('/locations', (req, res) => {
   res.json(LOCATIONS.map((l) => ({ id: l, label: LOCATION_LABEL[l] })));
 });
 
-// Ambil jadwal untuk 1 minggu (weekStart = Minggu/Sunday, YYYY-MM-DD), auto-buat slot kosong kalau belum ada
+// Ambil jadwal untuk 1 minggu (weekStart = Senin/Monday, YYYY-MM-DD), auto-buat slot kosong kalau belum ada
 // ?department=host_live|packing|admin -> filter bag & host sesuai tim (default host_live)
 // ?location=jakarta|tangerang -> filter sesuai lokasi live (default tangerang). Host & bag
 // dari lokasi berbeda TIDAK PERNAH digabung/ditukar di sini.
@@ -69,7 +70,9 @@ router.get('/week/:weekStart', async (req, res, next) => {
       })
     ).rows[0];
 
-    res.json({ dates, bags, hosts, entries, lastLog: log || null, department, location, shifts: DEPT_SHIFTS[department] });
+    const eventDates = dates.filter((d) => isEventBlackout(d));
+
+    res.json({ dates, bags, hosts, entries, lastLog: log || null, department, location, shifts: DEPT_SHIFTS[department], eventDates });
   } catch (err) {
     next(err);
   }

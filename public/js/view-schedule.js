@@ -12,14 +12,13 @@ const LOCATION_TABS = [
 
 let _scheduleState = { weekStart: weekStartOf(new Date()), department: 'host_live', location: 'jakarta', days: 7 };
 
-// Minggu (Sunday) dipakai sebagai hari pertama dalam seminggu, sesuai
-// tampilan jadwal (kolom TANGGAL dimulai dari "Minggu") & kebiasaan lokal.
-// Dulu sempat pakai patokan Senin (ISO) yang bikin weekPicker "meloncat" ke
-// minggu sebelumnya kalau user pilih tanggal hari Minggu — sekarang konsisten.
+// Senin dipakai sebagai hari pertama dalam seminggu (semua lokasi, Jakarta
+// maupun Tangerang, sekarang memakai siklus mingguan yang sama: Senin-Minggu).
 function weekStartOf(date) {
   const d = new Date(date);
   const day = d.getDay(); // 0 = Minggu ... 6 = Sabtu
-  d.setDate(d.getDate() - day);
+  const diffToMonday = (day + 6) % 7; // Minggu(0) -> 6 hari mundur ke Senin lalu
+  d.setDate(d.getDate() - diffToMonday);
   return d.toISOString().slice(0, 10);
 }
 
@@ -116,6 +115,14 @@ async function renderScheduleView(container) {
 
   const entryMap = new Map();
   for (const e of data.entries) entryMap.set(`${e.date}|${e.bag_id}|${e.shift}`, e);
+  const eventDateSet = new Set(data.eventDates || []);
+
+  if (eventDateSet.size) {
+    container.appendChild(el('div', {
+      class: 'summary-box event',
+      html: `<strong>📅 Ada tanggal event minggu ini:</strong> ${[...eventDateSet].map(fmtDateLabel).join(', ')} — usahakan tidak ada yang libur di tanggal ini.`
+    }));
+  }
 
   const panel = el('div', { class: 'panel', style: 'overflow-x:auto;' });
   const table = el('table', { class: 'sched-table' });
@@ -133,8 +140,11 @@ async function renderScheduleView(container) {
 
   const tbody = el('tbody');
   for (const date of data.dates) {
-    const tr = el('tr');
-    tr.appendChild(el('td', { class: 'sched-date-col', text: fmtDateLabel(date) }));
+    const dow = new Date(date + 'T00:00:00').getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isEvent = eventDateSet.has(date);
+    const tr = el('tr', { class: (isWeekend ? 'weekend-row' : '') + (isEvent ? ' event-row' : '') });
+    tr.appendChild(el('td', { class: 'sched-date-col' + (isWeekend ? ' weekend' : ''), text: fmtDateLabel(date) + (isEvent ? ' 📅' : '') }));
     for (const bag of data.bags) {
       for (const shift of shifts) {
         const entry = entryMap.get(`${date}|${bag.id}|${shift}`);

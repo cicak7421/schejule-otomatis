@@ -233,13 +233,11 @@ async function seed() {
   // seperti histori Jakarta -- tidak akan pernah ditimpa generate ulang,
   // dan dipakai AI/rule-based sebagai bahan belajar pola.
   //
-  // Catatan: cuma nutup 5 hari (Senin-Jumat) karena itu semua data yang
-  // tersedia; tidak menutup 1 minggu penuh Minggu-Sabtu. Supaya jadwal
-  // berikutnya tetap bisa jalan mingguan (Minggu-Sabtu) seperti Jakarta,
-  // generate lanjutannya dilakukan SATU KALI untuk rentang 15-23 Agt 2026
-  // (9 hari, Sabtu-Minggu) lewat tombol Generate di dashboard dengan
-  // "Jumlah hari" diisi 9 -- ini menyambung pas ke tanggal 23 Agt (Minggu)
-  // sebagai awal siklus mingguan biasa 7 hari untuk minggu-minggu setelahnya.
+  // Catatan: histori ini cuma nutup 5 hari (Senin-Jumat, 10-14 Agt 2026)
+  // karena itu semua data manual yang tersedia. Siklus mingguan sistem
+  // (Senin-Minggu) tetap sejalan dengan Jakarta -- minggu berikutnya untuk
+  // Tangerang mulai Senin 17 Agt 2026 (7 hari penuh, Senin-Minggu) lewat
+  // tombol Generate di dashboard seperti biasa, tidak perlu rentang khusus.
   const tangerangScheduleCheck = (
     await db.execute(
       `SELECT se.id FROM schedule_entries se JOIN bags b ON b.id = se.bag_id

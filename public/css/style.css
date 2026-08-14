@@ -172,6 +172,11 @@ tr:last-child td { border-bottom: none; }
 .slot-cell.empty select { color: #c8c2dc; }
 .slot-cell.ai { background: #f6fff9; }
 .lock-icon { font-size: 11px; margin-left: 4px; opacity: 0.6; }
+.weekend-row td { background: #fff8f2; }
+.weekend-row td.sched-date-col.weekend { color: #b5590d; }
+.event-row td { background: #fff0f4; }
+.event-row td.sched-date-col { color: #a1305f; }
+.summary-box.event { background: var(--pink-soft); color: #a1305f; }
 
 .toast {
   position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: #fff;

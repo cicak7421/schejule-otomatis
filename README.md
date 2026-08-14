@@ -22,10 +22,25 @@ menerima request libur dari host, dan membuat jadwal otomatis dengan bantuan AI 
     adil dan natural. Setiap usulan AI tetap divalidasi ulang oleh aturan keras sebelum disimpan —
     AI tidak pernah bisa melanggar aturan.
   - Aturan keras yang selalu dijaga:
-    1. Host **tidak boleh** dapat shift Siang (S) lalu besoknya shift Pagi (P), lintas bag.
-    2. Host **boleh** dijadwalkan di 2 bag berbeda pada hari yang sama (shift berbeda).
+    1. Host **tidak boleh** dapat shift Siang (S) lalu besoknya shift Pagi (P), maupun shift Malam (M)
+       lalu besoknya Pagi/Siang ("jumping"), lintas bag.
+    2. Host **maksimal 1 shift per hari** (tidak boleh dobel, di bag manapun).
     3. Host **tidak boleh** dobel di shift & tanggal yang sama persis di bag berbeda (bentrok waktu).
     4. Host yang sedang cuti disetujui tidak akan dijadwalkan.
+  - Aturan libur (best-effort, dijaga otomatis oleh mesin jadwal):
+    1. Hari libur diusahakan jatuh di **Senin-Kamis** dulu. Kalau jatah libur tidak cukup ditampung di
+       Senin-Kamis (misal kapasitas mepet), baru boleh geser ke **Jumat**, lalu **Sabtu**, lalu **Minggu**
+       (urutan prioritas terakhir) — berlaku untuk semua departemen, termasuk Host Live yang idealnya
+       sama sekali tidak libur di akhir pekan.
+    2. Setiap orang dapat jatah libur (dari `max_shifts_per_week`, default 6 dari 7 hari = 1x libur/minggu),
+       disebar supaya **tidak ada 2 orang di departemen yang sama libur bareng** di tanggal yang sama
+       kecuali memang terpaksa (kapasitas kurang).
+    3. Admin & Packing **diusahakan libur bareng** di tanggal yang sama (best-effort pairing) — karena
+       Admin cuma 2 orang dan Packing 3 orang, akan selalu ada 1 orang Packing yang liburnya beda tanggal.
+    4. Tanggal **23-25 tiap bulan** (event bulanan) dan **tanggal kembar** (mis. 8 Agt/8.8, 9 Sep/9.9,
+       dst — window H-1 & H, jadi 8.8 = 7-8 Agt) ditandai sebagai masa event: hari libur diusahakan
+       **tidak** jatuh di tanggal tsb selama masih ada pilihan lain.
+  - Siklus mingguan: **Senin - Minggu** (7 hari), berlaku sama untuk Jakarta maupun Tangerang.
 - **Override manual** — HR bisa ganti host langsung dari dropdown di tabel jadwal; slot yang diubah manual
   otomatis terkunci (🔒) supaya tidak ditimpa saat generate ulang. Klik ikon kunci untuk membuka lagi.
 - **Router 5 API key Groq** — kalau satu key kena rate-limit / error, sistem otomatis pindah ke key berikutnya.
